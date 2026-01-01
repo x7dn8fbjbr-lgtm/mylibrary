@@ -1,0 +1,59 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: mylibrary-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-mylibrary}
+      POSTGRES_USER: ${DB_USER:-mylibraryuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    volumes:
+      - /opt/mylibrary/postgres:/var/lib/postgresql/data
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-mylibraryuser}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mylibrary:latest
+    container_name: mylibrary-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER:-mylibraryuser}:${DB_PASSWORD}@db:5432/${DB_NAME:-mylibrary}
+      - SECRET_KEY=${SECRET_KEY}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://bibliothek.hoefer2000.de}
+      - DOMAIN=${DOMAIN:-bibliothek.hoefer2000.de}
+    volumes:
+      - /mnt/media/mylibrary/uploads:/app/uploads
+      - /opt/mylibrary/backups:/app/backups
+    networks:
+      - app-net
+      - traefik-proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-proxy"
+      
+      - "traefik.http.routers.mylibrary.rule=Host(`${SUBDOMAIN:-bibliothek}.hoefer2000.de`)"
+      - "traefik.http.routers.mylibrary.entrypoints=websecure"
+      - "traefik.http.routers.mylibrary.tls=true"
+      - "traefik.http.routers.mylibrary.tls.certresolver=letsencrypt"
+      
+      - "traefik.http.services.mylibrary.loadbalancer.server.port=8000"
+
+networks:
+  traefik-proxy:
+    external: true
+  app-net:
+    driver: bridge
