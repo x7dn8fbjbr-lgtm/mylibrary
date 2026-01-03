@@ -81,13 +81,25 @@ async function login(username, password) {
             body: formData
         });
         
-        if (!response.ok) throw new Error('Login fehlgeschlagen');
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({detail: 'Login fehlgeschlagen'}));
+            throw new Error(errorData.detail || 'Login fehlgeschlagen');
+        }
         
         const data = await response.json();
+        
+        // WICHTIG: Token speichern!
         authToken = data.access_token;
         localStorage.setItem('authToken', authToken);
         
+        // User-Daten laden
         await loadCurrentUser();
+        
+        // Navigation einblenden
+        document.getElementById('navMenu').classList.remove('hidden');
+        document.getElementById('userMenu').classList.remove('hidden');
+        
+        // Zur Bibliothek
         showView('library');
         showToast('Erfolgreich angemeldet!', 'success');
     } catch (error) {
